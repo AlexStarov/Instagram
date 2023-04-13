@@ -41,7 +41,7 @@ async def login_user(username: str, password: str) -> instagrapi.Client:
 
     cl = Client()
     # adds a random delay between 1 and 3 seconds after each request
-    cl.delay_range = [2, 3]
+    cl.delay_range = [2, 7]
 
     try:
         session = cl.load_settings(path=f"../.sessions/{username}.json")
@@ -145,46 +145,74 @@ async def threads_direct_messages(username: str, cl: instagrapi.Client):
             print(f'{threads_direct_messages_now[0].users=}')
             print(f'{threads_direct_messages_now[0].inviter=}')
 
-            print(f'{threads_direct_messages_now[0].users[0].pk=}')
-            print(f'{threads_direct_messages_now[0].users[0].username=}')
-            print(f'{(send_to := cl.user_id_from_username(username=threads_direct_messages_now[0].users[0].username))=}')
-            print(threads_direct_messages_now[0].users)
-
-            print(f'{threads_direct_messages_now[0].inviter.pk=}')
-            print(f'{threads_direct_messages_now[0].inviter.username=}')
-            print(f'{cl.user_id_from_username(username=threads_direct_messages_now[0].inviter.username)=}')
-            print(threads_direct_messages_now[0].inviter)
+            # print(f'{threads_direct_messages_now[0].users[0].pk=}')
+            # print(f'{threads_direct_messages_now[0].users[0].username=}')
+            # print(f'{(send_to := cl.user_id_from_username(username=threads_direct_messages_now[0].users[0].username))=}')
+            # print(threads_direct_messages_now[0].users)
+            #
+            # print(f'{threads_direct_messages_now[0].inviter.pk=}')
+            # print(f'{threads_direct_messages_now[0].inviter.username=}')
+            # print(f'{cl.user_id_from_username(username=threads_direct_messages_now[0].inviter.username)=}')
+            # print(threads_direct_messages_now[0].inviter)
 
             global user_id
             if threads_direct_messages_now[0].inviter.pk != user_id:
                 if 'Я подписался'.lower() in threads_direct_messages_now[0].messages[0].text.lower():
-                    print('ТЕСТОВАЯ СТРОКА')
-                    cl.direct_send(text="Это отвечает БОТ: Я получил от тебя сообщение, что ты подписался, теперь мне нужно время, что-бы проверить это. Подожди немножко.", user_ids=[int(send_to), ])
 
+                    checking_user_id = threads_direct_messages_now[0].users[0].pk
+                    cl.direct_send(text="Это отвечает БОТ:\r\n"
+                                        "Я получил от тебя сообщение, что ты подписался,"
+                                        "теперь мне нужно время, что-бы проверить это.\n"
+                                        "Подожди немножечко.", user_ids=[int(checking_user_id), ])
+
+                    if await checking_user_id_among_followers(cl=cl, user_id=checking_user_id):
+                        msg = "Это отвечает БОТ:\r\nДа ты просто ОГОНЬ.\n" \
+                              "Я нашёл тебя среди подписанных на меня.\n" \
+                              "Ты МАЛАДЕС.\r" \
+                              "Праздравляю тебя!!!"
+
+                    else:
+                        msg = "Это отвечает БОТ:\r\nЧёт ты гонишь фраерок.\n" \
+                              "Я не нашёл тебя среди подписанных на меня.\n" \
+                              "Ты меня в натуре разводишь....\r" \
+                              "А не пощёл бы ты...!!!"
+
+                    cl.direct_send(text=msg, user_ids=[int(checking_user_id), ])
 
     return None
 
 
-async def process(username: str, password: str) -> None:
-    print('process')
-    print(datetime.now())
-    print(username, password)
-    cl = await login_user(username=username, password=password)
-    await threads_direct_messages(username=username, cl=cl)
+async def checking_user_id_among_followers(cl: instagrapi.Client, user_id: str) -> bool:
+
+    followers: set = await get_followers(cl=cl)
+
+    return user_id in followers
+
+
+async def get_followers(cl: instagrapi.Client) -> set:
+
+    return set(cl.user_followers(user_id=str(cl.user_id), amount=0))
+    # for i, follower in enumerate(followers):
+    #     print(i, follower, cl.username_from_user_id(user_id=follower))
 
 
 from datetime import datetime
 
 
 async def main():
-    n = 0
-    while True:
-        print(f'{(n := n + 1)=}')
-        print('!!!', datetime.now())
-        await asyncio.gather(*[process(username=username, password=password) for username, password in users.items()])
-        print('@@@', datetime.now())
 
-        sleep(random.uniform(5, 13))
+    while True:
+        for username, password in users.items():
+            print('!!!', datetime.now())
+
+            if 'cl' not in locals():
+                cl = await login_user(username=username, password=password)
+
+            await threads_direct_messages(username=username, cl=cl)
+
+            print('@@@', datetime.now())
+
+        sleep(random.uniform(7, 20))
 
 
 # Press the green button in the gutter to run the script.
