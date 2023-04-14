@@ -1,7 +1,6 @@
 #!/bin/python3
 
 import os
-import json
 import asyncio
 import random
 from time import sleep
@@ -17,14 +16,10 @@ load_dotenv(dotenv_path='../.envs/.env', verbose=True)
 USERNAMES: list = os.getenv('USERNAMES').split(', ')
 
 users: dict = {}
-for user in USERNAMES:
-    if user == '': continue
-    load_dotenv(dotenv_path=f'../.envs/{user}.env', verbose=True)
-    users.update({user: os.getenv('PASSWORD')})
-
-username: str = 'krasnikov.sergey.78'
-password: str = users.get(username)
-user_id: int
+for username in USERNAMES:
+    if username == '' or username == 'keksik_com_ua': continue
+    load_dotenv(dotenv_path=f'../.envs/{username}.env', verbose=True, override=True)
+    users.update({username: {'password': os.getenv('PASSWORD')}})
 
 logger = logging.getLogger()
 
@@ -41,7 +36,7 @@ async def login_user(username: str, password: str) -> instagrapi.Client:
 
     cl = Client()
     # adds a random delay between 1 and 3 seconds after each request
-    cl.delay_range = [2, 7]
+    cl.delay_range = [2, 6]
 
     try:
         session = cl.load_settings(path=f"../.sessions/{username}.json")
@@ -85,33 +80,28 @@ async def login_user(username: str, password: str) -> instagrapi.Client:
     if not login_via_pw and not login_via_session:
         raise Exception("Couldn't login user with either password or session")
 
-    global user_id
-    user_id = cl.user_id_from_username(username)
-    print(f'{user_id=}')
     return cl
 
-threads_direct_messages_dict: dict = {username: {} for username in users.keys() if username != ''}
 
-
-async def threads_direct_messages(username: str, cl: instagrapi.Client):
+async def threads_direct_messages(username: str, user_dict: dict):
     from pprint import pprint
-    global threads_direct_messages_dict
     print('threads')
     print(datetime.now())
     print(username)
 
+    cl = user_dict.get('cl')
     threads_direct_messages_now = cl.direct_threads(amount=10)
-    threads_direct_messages_old = threads_direct_messages_dict.get(username)
+    threads_direct_messages_old = user_dict.get('threads_direct_messages')
     if not threads_direct_messages_old:
         # TODO: это поведение в будующем нужно переделать, брать старое значение threads_direct_messages из базы
         """ Starting life from scratch """
-        threads_direct_messages_dict[username] = threads_direct_messages_now
+        user_dict['threads_direct_messages'] = threads_direct_messages_now
         return None
 
     if threads_direct_messages_old[0].id != threads_direct_messages_now[0].id or\
             threads_direct_messages_old[0].messages[0].id != threads_direct_messages_now[0].messages[0].id:
         """ Saving the current state """
-        threads_direct_messages_dict.update({username: threads_direct_messages_now})
+        user_dict['threads_direct_messages'] = threads_direct_messages_now
 
         threads_now_delete_list = []
 
@@ -155,29 +145,40 @@ async def threads_direct_messages(username: str, cl: instagrapi.Client):
             # print(f'{cl.user_id_from_username(username=threads_direct_messages_now[0].inviter.username)=}')
             # print(threads_direct_messages_now[0].inviter)
 
-            global user_id
-            if threads_direct_messages_now[0].inviter.pk != user_id:
-                if 'Я подписался'.lower() in threads_direct_messages_now[0].messages[0].text.lower():
+            for thread in threads_direct_messages_now:
 
-                    checking_user_id = threads_direct_messages_now[0].users[0].pk
-                    cl.direct_send(text="Это отвечает БОТ:\r\n"
-                                        "Я получил от тебя сообщение, что ты подписался,"
-                                        "теперь мне нужно время, что-бы проверить это.\n"
-                                        "Подожди немножечко.", user_ids=[int(checking_user_id), ])
+                # if thread.inviter.pk != user_id:
+                for m, message in enumerate(thread.messages):
+                    print(m, message)
+                    print(m, message.text)
+                    print(m, message.text.lower().startswith('Это отвечает БОТ:'.lower()))
+                    if 'Я подписался'.lower() in message.text.lower() or\
+                            'Я подписалась'.lower() in message.text.lower():
 
-                    if await checking_user_id_among_followers(cl=cl, user_id=checking_user_id):
-                        msg = "Это отвечает БОТ:\r\nДа ты просто ОГОНЬ.\n" \
-                              "Я нашёл тебя среди подписанных на меня.\n" \
-                              "Ты МАЛАДЕС.\r" \
-                              "Праздравляю тебя!!!"
+                        if m == 0 or \
+                            (m > 0 and
+                             message[m - 1].user_id != '7920069060' and
+                             not message[m - 1].text.lower().startswith('Это отвечает БОТ:'.lower())):
 
-                    else:
-                        msg = "Это отвечает БОТ:\r\nЧёт ты гонишь фраерок.\n" \
-                              "Я не нашёл тебя среди подписанных на меня.\n" \
-                              "Ты меня в натуре разводишь....\r" \
-                              "А не пощёл бы ты...!!!"
+                            checking_user_id = thread.users[0].pk
+                            cl.direct_send(text="Это отвечает БОТ:\n"
+                                                "Я получил от тебя сообщение, что ты подписался,"
+                                                "теперь мне нужно время, что-бы проверить это.\n"
+                                                "Подожди немножечко.", user_ids=[int(checking_user_id), ])
 
-                    cl.direct_send(text=msg, user_ids=[int(checking_user_id), ])
+                            if await checking_user_id_among_followers(cl=cl, user_id=checking_user_id):
+                                msg = "Это отвечает БОТ:\nДа ты просто ОГОНЬ.\n" \
+                                      "Я нашёл тебя среди подписанных на меня.\n" \
+                                      "Ты МАЛАДЕС.\n" \
+                                      "Праздравляю тебя!!!"
+
+                            else:
+                                msg = "Это отвечает БОТ:\nЧёт ты гонишь фраерок.\n" \
+                                      "Я не нашёл тебя среди подписанных на меня.\n" \
+                                      "Ты меня в натуре разводишь....\n" \
+                                      "А не пощёл бы ты...!!!"
+
+                            cl.direct_send(text=msg, user_ids=[int(checking_user_id), ])
 
     return None
 
@@ -202,13 +203,17 @@ from datetime import datetime
 async def main():
 
     while True:
-        for username, password in users.items():
+        for username in users.keys():
             print('!!!', datetime.now())
 
-            if 'cl' not in locals():
-                cl = await login_user(username=username, password=password)
+            user_dict: dict = users[username]
 
-            await threads_direct_messages(username=username, cl=cl)
+            if not user_dict.get('cl'):
+                cl = await login_user(username=username, password=user_dict.get('password'))
+                user_dict.update({'cl': cl, 'user_id': cl.user_id, 'username': cl.username})
+                sleep(random.uniform(25, 35))
+
+            await threads_direct_messages(username=username, user_dict=user_dict)
 
             print('@@@', datetime.now())
 
