@@ -1,25 +1,18 @@
 #!/bin/python3
 
-import os
 import asyncio
 import random
 from time import sleep
 
 import instagrapi
-from dotenv import load_dotenv
 from instagrapi import Client
-from instagrapi.exceptions import LoginRequired
+from instagrapi.exceptions import LoginRequired, ChallengeRequired, ClientError
+
+from users import users
+from auth.challenge import challenge_code_handler
+
 import logging
 
-load_dotenv(dotenv_path='../.envs/.env', verbose=True)
-
-USERNAMES: list = os.getenv('USERNAMES').split(', ')
-
-users: dict = {}
-for username in USERNAMES:
-    if username == '' or username == 'keksik_com_ua': continue
-    load_dotenv(dotenv_path=f'../.envs/{username}.env', verbose=True, override=True)
-    users.update({username: {'password': os.getenv('PASSWORD')}})
 
 logger = logging.getLogger()
 
@@ -36,7 +29,8 @@ async def login_user(username: str, password: str) -> instagrapi.Client:
 
     cl = Client()
     # adds a random delay between 1 and 3 seconds after each request
-    cl.delay_range = [2, 6]
+    cl.delay_range = [1, 4]
+    cl.challenge_code_handler = challenge_code_handler
 
     try:
         session = cl.load_settings(path=f"../.sessions/{username}.json")
@@ -126,14 +120,14 @@ async def threads_direct_messages(username: str, user_dict: dict):
             for n in threads_now_delete_list:
                 threads_direct_messages_now.pop(n)
 
-            print(threads_direct_messages_now[0])
-            print(threads_direct_messages_now[0].messages)
-            print(threads_direct_messages_now[0].messages[0])
-            print(threads_direct_messages_now[0].messages[0].item_type)
-            print(threads_direct_messages_now[0].messages[0].text)
-
-            print(f'{threads_direct_messages_now[0].users=}')
-            print(f'{threads_direct_messages_now[0].inviter=}')
+            # print(threads_direct_messages_now[0])
+            # print(threads_direct_messages_now[0].messages)
+            # print(threads_direct_messages_now[0].messages[0])
+            # print(threads_direct_messages_now[0].messages[0].item_type)
+            # print(threads_direct_messages_now[0].messages[0].text)
+            #
+            # print(f'{threads_direct_messages_now[0].users=}')
+            # print(f'{threads_direct_messages_now[0].inviter=}')
 
             # print(f'{threads_direct_messages_now[0].users[0].pk=}')
             # print(f'{threads_direct_messages_now[0].users[0].username=}')
@@ -148,21 +142,21 @@ async def threads_direct_messages(username: str, user_dict: dict):
             for thread in threads_direct_messages_now:
 
                 # if thread.inviter.pk != user_id:
-                for m, message in enumerate(thread.messages):
-                    print(m, message)
-                    print(m, message.text)
-                    print(m, message.text.lower().startswith('Это отвечает БОТ:'.lower()))
-                    if 'Я подписался'.lower() in message.text.lower() or\
-                            'Я подписалась'.lower() in message.text.lower():
+                messages: list = thread.messages
+                for m, message in enumerate(messages):
+
+                    if message.text and \
+                        ('Я подписался'.lower() in message.text.lower() or
+                            'Я подписалась'.lower() in message.text.lower()):
 
                         if m == 0 or \
                             (m > 0 and
-                             message[m - 1].user_id != '7920069060' and
-                             not message[m - 1].text.lower().startswith('Это отвечает БОТ:'.lower())):
+                             messages[m - 1].user_id != '7920069060' and
+                             not messages[m - 1].text.lower().startswith('Это отвечает БОТ:'.lower())):
 
                             checking_user_id = thread.users[0].pk
                             cl.direct_send(text="Это отвечает БОТ:\n"
-                                                "Я получил от тебя сообщение, что ты подписался,"
+                                                "Я получил от тебя сообщение, что ты подписался, "
                                                 "теперь мне нужно время, что-бы проверить это.\n"
                                                 "Подожди немножечко.", user_ids=[int(checking_user_id), ])
 
@@ -192,7 +186,13 @@ async def checking_user_id_among_followers(cl: instagrapi.Client, user_id: str) 
 
 async def get_followers(cl: instagrapi.Client) -> set:
 
-    return set(cl.user_followers(user_id=str(cl.user_id), amount=0))
+    while True:
+        try:
+            followers = cl.user_followers(user_id=str(cl.user_id), amount=0)
+            # print(followers)
+            return set(followers)
+        except ChallengeRequired:
+            pass
     # for i, follower in enumerate(followers):
     #     print(i, follower, cl.username_from_user_id(user_id=follower))
 
@@ -211,13 +211,18 @@ async def main():
             if not user_dict.get('cl'):
                 cl = await login_user(username=username, password=user_dict.get('password'))
                 user_dict.update({'cl': cl, 'user_id': cl.user_id, 'username': cl.username})
-                sleep(random.uniform(25, 35))
+                sleep(random.uniform(2, 6))
 
-            await threads_direct_messages(username=username, user_dict=user_dict)
+        for username in users.keys():
+            user_dict: dict = users[username]
+            try:
+                await threads_direct_messages(username=username, user_dict=user_dict)
+            except ClientError as e:
+                print(f'instagrapi.exceptions.ClientError: {e}')
 
             print('@@@', datetime.now())
 
-        sleep(random.uniform(7, 20))
+        sleep(random.uniform(8, 21))
 
 
 # Press the green button in the gutter to run the script.
