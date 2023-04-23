@@ -211,18 +211,42 @@ async def main():
             if not user_dict.get('cl'):
                 cl = await login_user(username=username, password=user_dict.get('password'))
                 user_dict.update({'cl': cl, 'user_id': cl.user_id, 'username': cl.username})
-                sleep(random.uniform(2, 6))
+                sleep(random.uniform(5, 9))
 
         for username in users.keys():
             user_dict: dict = users[username]
+
+            pause = user_dict.get('pause', 0)
+            print(f'{pause=}')
+            if pause:
+                user_dict.update({'pause': pause - 1})
+                sleep(random.uniform(18, 29))
+                continue
+
             try:
                 await threads_direct_messages(username=username, user_dict=user_dict)
+
             except ClientError as e:
                 print(f'instagrapi.exceptions.ClientError: {e}')
+                message = e.__getattribute__('message')
+                print(f'{message=}')
+                # print(dir(e))
+                if message == 'Please wait a few minutes before you try again.':
+                    print('pause')
+                    user_dict.update({'pause': 10})
+
+            except AssertionError as e:
+                message = e.__getattribute__('message')
+                if message == 'Please wait a few minutes before you try again.':
+                    sleep(125)
+                require_login = e.__getattribute__('require_login')
+                if require_login:
+                    cl = await login_user(username=username, password=user_dict.get('password'))
+                    user_dict.update({'cl': cl, 'user_id': cl.user_id, 'username': cl.username})
 
             print('@@@', datetime.now())
 
-        sleep(random.uniform(8, 21))
+        sleep(random.uniform(18, 29))
 
 
 # Press the green button in the gutter to run the script.
