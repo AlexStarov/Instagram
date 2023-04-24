@@ -13,5 +13,6 @@ for username in USERNAMES:
     load_dotenv(dotenv_path=f'../.envs/{username}.env', verbose=True, override=True)
     users.update({username: {
         'password': os.getenv('PASSWORD'),
+        'seed': os.getenv('GOOGLE_AUTHENTICATOR_SEED'),
         'recovery_email': os.getenv('RECOVERY_EMAIL'),
         'recovery_email_password': os.getenv('RECOVERY_EMAIL_PASSWORD')}})
