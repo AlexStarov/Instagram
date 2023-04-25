@@ -4,6 +4,7 @@ from __future__ import absolute_import
 
 import asyncio
 import json
+import os
 import random
 from datetime import datetime
 from time import sleep
@@ -250,10 +251,11 @@ async def main():
                 cl = user_dict.get('cl')
                 print(cl)
                 try:
-                    threads = cl.direct_threads(amount=1)
+                    threads = cl.direct_threads(amount=1000)
 
                     for thread in threads:
                         print(thread)
+                        print(thread.messages[0].timestamp)
                     # await threads_direct_messages(username=username, user_dict=user_dict)
 
                 except ClientError as e:
@@ -266,7 +268,13 @@ async def main():
                     except json.decoder.JSONDecodeError:
                         pass
 
-                    # if message == 'Please wait a few minutes before you try again.':
+                    if message == 'Please wait a few minutes before you try again.':
+                        cl.logout()
+                        os.remove(f'../.sessions/{username}.json')
+                        cl = await login_user(username=username, password=user_dict.get('password'), seed=user_dict.get('seed'))
+                        user_dict.update({'cl': cl, 'user_id': cl.user_id, 'username': cl.username})
+                        sleep(random.uniform(1, 5))
+                        continue
                     #     print('pause')
                     #     print(dir(e))
                     #     user_dict.update({'pause': 15})
@@ -287,19 +295,19 @@ async def main():
 
                 print('@@@', datetime.now())
 
-        break
         # try:
         #     print('Now you can INTERRUPT the process!!!')
         #     sleep(random.uniform(21, 51))
         # except KeyboardInterrupt:
-        #     for username in users.keys():
-        #
-        #         user_dict: dict = users[username]
-        #         cl = user_dict.get('cl')
-        #         if cl:
-        #             cl.logout()
+        for username in users.keys():
+
+            user_dict: dict = users[username]
+            cl = user_dict.get('cl')
+            if cl:
+                cl.logout()
         #
         #     raise
+        break
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
